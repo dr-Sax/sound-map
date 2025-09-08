@@ -106,6 +106,7 @@ export default {
           content: `
             <div style="width: 300px; text-align: center; background: repeating-radial-gradient(farthest-corner at 5% 5%, rgb(208, 178, 153) .0099%, rgb(33, 230, 230) .05%);">
 
+              
               <h3 style="font-size: 30px; margin: 0 0 10px 0; color: #4a90e2;">${soundData.title}</h3>
 
               <p style="margin: 0; font-size: 14px; color: #333;"><em>${soundData.description}</em></p>
