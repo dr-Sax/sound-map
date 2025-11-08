@@ -35,6 +35,7 @@ header {
   text-align: center;
 }
 
+
 main {
   padding: 1rem;
   background: repeating-radial-gradient(farthest-corner at 5% 5%, rgb(208, 178, 153) .0099%, rgb(33, 230, 230) .05%);
