@@ -1,12 +1,56 @@
 <template>
   <div class="sound-map">
     
-    <!-- Google Map -->
-    <div class="map-container">
-      <div ref="mapElement" style="width: 100%; height: 400px;"></div>
+    <!-- File Upload Section -->
+    <div v-if="!dataLoaded" class="upload-section">
+      <h2>Upload GPS Tracking Session</h2>
+      <div class="upload-controls">
+        <div class="file-input">
+          <label for="json-upload">📄 JSON File:</label>
+          <input 
+            id="json-upload" 
+            type="file" 
+            accept=".json" 
+            @change="handleJsonUpload"
+          />
+        </div>
+        <div class="file-input">
+          <label for="audio-upload">🎵 MP3 File:</label>
+          <input 
+            id="audio-upload" 
+            type="file" 
+            accept=".mp3,.webm" 
+            @change="handleAudioUpload"
+          />
+        </div>
+      </div>
+      <button 
+        v-if="jsonFile && audioFile" 
+        @click="loadSession" 
+        class="load-btn"
+      >
+        Load Session
+      </button>
     </div>
-    
-    <p>Click markers to see and hear each sound location!</p>
+
+    <!-- Map Display -->
+    <div v-if="dataLoaded" class="map-section">
+      <div class="session-info">
+        <h2>{{ sessionData.session_name }}</h2>
+        <button @click="resetSession" class="reset-btn">Upload New Session</button>
+      </div>
+
+      <!-- Google Map -->
+      <div class="map-container">
+        <div ref="mapElement" style="width: 100%; height: 500px;"></div>
+      </div>
+      
+      <div class="legend">
+        <div><span class="legend-marker gps">📍</span> GPS Point</div>
+        <div><span class="legend-marker audio">🎤</span> Audio Segment</div>
+        <div><span class="legend-marker annotation">💬</span> Text Annotation</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -14,169 +58,279 @@
 import { ref, onMounted, nextTick } from 'vue'
 
 export default {
-  name: 'MinimalSoundMap',
+  name: 'GPSSoundMap',
   setup() {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-    const center = { lat: 41.495304, lng: -81.796885 }  // Change to your location
     
     const mapElement = ref(null)
     const mapInstance = ref(null)
-    
-    // Sound markers with 10-second YouTube loops - CUSTOMIZE THESE!
-    const soundMarkers = [
-      {
-        id: 1,
-        position: { lat: 41.495335, lng: -81.796369},
-        icon: 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExOWh6ajM0amR2b2dmb2x2NHdvdG5yNmtpYTc2MmFxazFmaG5nZnN4YiZlcD12MV9zdGlja2Vyc19zZWFyY2gmY3Q9cw/DIhWp1sTDgm3oR8lb1/200w.webp',
-        title: 'Veterans War Memorial',
-        description: 'Three flags sway in the wind.  The metal pulley allowing the flags to be raised or lowered clanks against the tall poles in at intervals with the wind.  The flags snap and ripple like the sound of an open car window on a highway.  This all happens above a Vietnam and Korean war memorial monument.',
-        videoId: '4rZniei1Xvc',  // Replace with your video ID
-        startTime: 0,
-        endTime: 15
-      },
-      {
-        id: 2,
-        position: { lat: 41.493941, lng: -81.798589},
-        icon: 'https://media1.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3a3N2ejU2bm94Yzhrb3phcnVuM3AyMHFzeWQ5Z2ozNnFjZXEzOTEzdyZlcD12MV9zdGlja2Vyc19zZWFyY2gmY3Q9cw/O0SEIsVpeAvI4LAJJ9/giphy.webp',
-        title: 'Skatepark',
-        description: 'Nas and other rap music playing as the skaters ride.  Groups gather in playful conversation.  Stepping on their tails of their boards rocking them like horses ready for the trail.  Strong precise pops launching towards a smooth 50-50 grind.',
-        videoId: 'Qy3WJepCh5g',  // Replace with your video ID
-        startTime: 0,
-        endTime: 32
-      },
-      {
-        id: 3,
-        position: { lat: 41.497345, lng: -81.797894 },
-        icon: 'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGZpd2k2enZuM2Vrb3U0MGl4aHYzYjY0dTI4Y2o2NnN2dHkzZnNpZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/QWrCFpI965negKDo0n/giphy.gif',
-        title: 'Solstice Steps',
-        description: 'A constant metronome of crickets from a nearby shrubbery.  Deep lake winds rustle my hair.  The lake undulates with a standing wave pattern pointed east.  Wave tips crash down gently with white water.  My girlfriends backpack zipper opens.  An occasional splash or trickle responds to powerful gusts of winds.  A vast and expansive atmosphere',
-        videoId: 'z2uYVTu1GOM',  // Replace with your video ID
-        startTime: 0,
-        endTime: 30
-      },
-      {
-        id: 4,
-        position: { lat: 41.495491, lng: -81.797512 },
-        icon: 'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2hsbmRyazNkMTh2MTQ4MW0yaGZnaWxvNDVqOGd0Y3RydGZ0MG5nbiZlcD12MV9zdGlja2Vyc19zZWFyY2gmY3Q9cw/kfUeCH6C8lPs2lPDcV/200w.webp',
-        title: 'Kids Cove Playground',
-        description: 'Kids sing we will we will rock you.  Occasional shrieks and mouse squeaks from the playful children at the park.  Pounding of feet on pavement as two girls chase and yell at a squirrel.  A flock of geese pass honking chaotically.  Dead leaves rustle against the wood chips.  Birds tweet in a tree.  Happy birthday is being sung in harmony in a pavilion.  Cheers and clapping. Cheers hooray.  quick steps clap against the ramped platform leading up to the playground jungle gym.  A girl pats a rhythm on the green playground bongos.',
-        videoId: 'Y4hsMF39osc',  // Replace with your video ID
-        startTime: 0,
-        endTime: 16
-      },
-      {
-        id: 5,
-        position: { lat: 41.494998, lng: -81.798563 },
-        icon: 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWNiZjRsaWdnb2Rsdjhla25wbmg3cjdrbW4ydjF2aWdrYjVyYXQxMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/fVTSQIY4ETEDpqB3EL/giphy.gif',
-        title: 'Pickleball Courts',
-        description: '2 games played on diagonal courts.  The serving player yells 3-2 followed by a hollow wooden smack. The dueling opponents paddles converse in alternating pitches.  One lower than the other.  Shoes skid across the pavement urgently chasing down the ball returned to the players opposite corner.',
-        videoId: 'GmyLNBE7MxE',  // Replace with your video ID
-        startTime: 0,
-        endTime: 12
+    const dataLoaded = ref(false)
+    const jsonFile = ref(null)
+    const audioFile = ref(null)
+    const sessionData = ref(null)
+    const audioElement = ref(null)
+    const audioUrl = ref(null)
+
+    // Handle JSON file upload
+    const handleJsonUpload = (event) => {
+      const file = event.target.files[0]
+      if (file) {
+        jsonFile.value = file
       }
-    ]
-    
-    // Initialize map with bright mode
+    }
+
+    // Handle audio file upload
+    const handleAudioUpload = (event) => {
+      const file = event.target.files[0]
+      if (file) {
+        audioFile.value = file
+        audioUrl.value = URL.createObjectURL(file)
+      }
+    }
+
+    // Load session data
+    const loadSession = async () => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        sessionData.value = JSON.parse(e.target.result)
+        dataLoaded.value = true
+        nextTick(() => {
+          initMap()
+        })
+      }
+      reader.readAsText(jsonFile.value)
+    }
+
+    // Reset and upload new session
+    const resetSession = () => {
+      dataLoaded.value = false
+      jsonFile.value = null
+      audioFile.value = null
+      sessionData.value = null
+      if (audioUrl.value) {
+        URL.revokeObjectURL(audioUrl.value)
+        audioUrl.value = null
+      }
+      if (mapInstance.value) {
+        mapInstance.value = null
+      }
+    }
+
+    // Parse ISO timestamp to Date
+    const parseTimestamp = (timestamp) => {
+      return new Date(timestamp)
+    }
+
+    // Play audio segment
+    const playAudioSegment = (segment) => {
+      if (!audioUrl.value) return
+
+      if (!audioElement.value) {
+        audioElement.value = new Audio(audioUrl.value)
+      }
+
+      const startTime = parseTimestamp(segment.start_timestamp)
+      const endTime = parseTimestamp(segment.end_timestamp)
+      const sessionStart = parseTimestamp(sessionData.value.gps_points[0].timestamp)
+      
+      // Calculate offset in seconds from session start
+      const startOffset = (startTime - sessionStart) / 1000
+      const endOffset = (endTime - sessionStart) / 1000
+
+      audioElement.value.currentTime = startOffset
+      audioElement.value.play()
+
+      // Stop at end time
+      const checkTime = setInterval(() => {
+        if (audioElement.value.currentTime >= endOffset) {
+          audioElement.value.pause()
+          clearInterval(checkTime)
+        }
+      }, 100)
+    }
+
+    // Initialize map
     const initMap = () => {
-      if (!window.google || !mapElement.value) {
+      if (!window.google || !mapElement.value || !sessionData.value) {
         setTimeout(initMap, 500)
         return
       }
-      
+
+      // Calculate center from GPS points
+      const gpsPoints = sessionData.value.gps_points
+      if (gpsPoints.length === 0) return
+
+      const firstPoint = gpsPoints[0].coordinates.split(', ')
+      const center = {
+        lat: parseFloat(firstPoint[0]),
+        lng: parseFloat(firstPoint[1])
+      }
+
       mapInstance.value = new google.maps.Map(mapElement.value, {
-        zoom: 16,
+        zoom: 15,
         center: center,
-        minZoom: 16,
-        maxZoom: 22,
-        disableDefaultUI: true,
+        mapTypeId: google.maps.MapTypeId.ROADMAP,
         zoomControl: true,
-        mapTypeId: google.maps.MapTypeId.SATELLITE
+        mapTypeControl: true,
+        streetViewControl: false
       })
-      
-      // Add markers
-      soundMarkers.forEach(soundData => {
-        const marker = new google.maps.Marker({
-          position: soundData.position,
-          map: mapInstance.value,
-          icon: { url: soundData.icon, scaledSize: new google.maps.Size(40, 40) },
-          title: soundData.title
-        })
-        
-        const infoWindow = new google.maps.InfoWindow({
-          content: `
-            <div style="width: 300px; text-align: center; background: repeating-radial-gradient(farthest-corner at 5% 5%, rgb(208, 178, 153) .0099%, rgb(33, 230, 230) .05%);">
 
-              
-              <h3 style="font-size: 30px; margin: 0 0 10px 0; color: #4a90e2;">${soundData.title}</h3>
-
-              <p style="margin: 0; font-size: 14px; color: #333;"><em>${soundData.description}</em></p>
-
-              <div id="player-${soundData.id}" style="width:300px; height: 200px; margin: 0 auto 10px auto;"></div>
-
-            </div>
-          `,
-          maxWidth: 500,
-
-        })
-        
-        marker.addListener('click', () => {
-          infoWindow.open(mapInstance.value, marker)
-          setTimeout(() => createPlayer(soundData), 100)
-        })
-      })
-    }
-    
-    // Create autoplay YouTube player with FIXED LOOPING
-    const createPlayer = (soundData) => {
-      if (!window.YT?.Player) return
-      
-      new YT.Player(`player-${soundData.id}`, {
-        height: '157',
-        width: '280',
-        videoId: soundData.videoId,
-        playerVars: {
-          'autoplay': 1,
-          'controls': 0,
-          'start': soundData.startTime,
-          'end': soundData.endTime,
-          'loop': 0,  // Disabled built-in loop - we handle it manually
-          'rel': 0,
-          'showinfo': 0,
-          'modestbranding': 1,
-          'mute': 0
-        },
-        events: {
-          'onStateChange': (event) => {
-            // When video ends, manually restart from custom start time (not 0!)
-            if (event.data === YT.PlayerState.ENDED) {
-              event.target.seekTo(soundData.startTime)
-              event.target.playVideo()
-            }
-          }
+      // Add GPS path
+      const pathCoordinates = gpsPoints.map(point => {
+        const coords = point.coordinates.split(', ')
+        return {
+          lat: parseFloat(coords[0]),
+          lng: parseFloat(coords[1])
         }
       })
+
+      const path = new google.maps.Polyline({
+        path: pathCoordinates,
+        geodesic: true,
+        strokeColor: '#4a90e2',
+        strokeOpacity: 0.8,
+        strokeWeight: 3
+      })
+      path.setMap(mapInstance.value)
+
+      // Add GPS point markers
+      gpsPoints.forEach((point, index) => {
+        const coords = point.coordinates.split(', ')
+        const position = {
+          lat: parseFloat(coords[0]),
+          lng: parseFloat(coords[1])
+        }
+
+        // Different marker for annotations
+        const hasAnnotation = point.annotation !== null
+        const icon = hasAnnotation
+          ? 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+          : 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+
+        const marker = new google.maps.Marker({
+          position: position,
+          map: mapInstance.value,
+          icon: icon,
+          title: hasAnnotation ? point.annotation : `GPS Point ${index + 1}`
+        })
+
+        if (hasAnnotation) {
+          const infoWindow = new google.maps.InfoWindow({
+            content: `
+              <div style="padding: 10px;">
+                <h3 style="margin: 0 0 10px 0;">📍 Annotation</h3>
+                <p style="margin: 0;"><strong>${point.annotation}</strong></p>
+                <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">
+                  ${new Date(point.timestamp).toLocaleString()}
+                </p>
+              </div>
+            `
+          })
+
+          marker.addListener('click', () => {
+            infoWindow.open(mapInstance.value, marker)
+          })
+        }
+      })
+
+      // Add audio segment markers
+      if (sessionData.value.audio_segments) {
+        sessionData.value.audio_segments.forEach((segment, index) => {
+          // Find closest GPS point to segment start
+          const segmentTime = parseTimestamp(segment.start_timestamp)
+          let closestPoint = gpsPoints[0]
+          let minDiff = Math.abs(parseTimestamp(closestPoint.timestamp) - segmentTime)
+
+          gpsPoints.forEach(point => {
+            const diff = Math.abs(parseTimestamp(point.timestamp) - segmentTime)
+            if (diff < minDiff) {
+              minDiff = diff
+              closestPoint = point
+            }
+          })
+
+          const coords = closestPoint.coordinates.split(', ')
+          const position = {
+            lat: parseFloat(coords[0]),
+            lng: parseFloat(coords[1])
+          }
+
+          const marker = new google.maps.Marker({
+            position: position,
+            map: mapInstance.value,
+            icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+            title: `Audio Segment ${index + 1}`
+          })
+
+          const startTime = new Date(segment.start_timestamp).toLocaleTimeString()
+          const endTime = new Date(segment.end_timestamp).toLocaleTimeString()
+          const duration = ((parseTimestamp(segment.end_timestamp) - parseTimestamp(segment.start_timestamp)) / 1000).toFixed(1)
+
+          const infoWindow = new google.maps.InfoWindow({
+            content: `
+              <div style="padding: 10px; text-align: center;">
+                <h3 style="margin: 0 0 10px 0;">🎤 Audio Segment ${index + 1}</h3>
+                <p style="margin: 5px 0; font-size: 12px;">
+                  <strong>Start:</strong> ${startTime}<br>
+                  <strong>End:</strong> ${endTime}<br>
+                  <strong>Duration:</strong> ${duration}s
+                </p>
+                <button 
+                  onclick="window.playSegment${index}()" 
+                  style="
+                    margin-top: 10px;
+                    padding: 8px 16px;
+                    background: #4a90e2;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                  "
+                >
+                  ▶️ Play Audio
+                </button>
+              </div>
+            `
+          })
+
+          // Create global function for play button
+          window[`playSegment${index}`] = () => {
+            playAudioSegment(segment)
+          }
+
+          marker.addListener('click', () => {
+            infoWindow.open(mapInstance.value, marker)
+          })
+        })
+      }
     }
-    
-    // Load APIs
-    const loadAPIs = () => {
-      // Google Maps
-      const mapsScript = document.createElement('script')
-      mapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`
-      window.initMap = initMap
-      document.head.appendChild(mapsScript)
-      
-      // YouTube API
-      const youtubeScript = document.createElement('script')
-      youtubeScript.src = 'https://www.youtube.com/iframe_api'
-      document.head.appendChild(youtubeScript)
+
+    // Load Google Maps API
+    const loadGoogleMaps = () => {
+      if (!window.google) {
+        const script = document.createElement('script')
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`
+        script.async = true
+        script.defer = true
+        document.head.appendChild(script)
+      }
     }
-    
+
     onMounted(() => {
-      nextTick(loadAPIs)
+      loadGoogleMaps()
     })
-    
+
     return {
-      mapElement
+      mapElement,
+      dataLoaded,
+      jsonFile,
+      audioFile,
+      sessionData,
+      handleJsonUpload,
+      handleAudioUpload,
+      loadSession,
+      resetSession
     }
   }
 }
@@ -184,16 +338,122 @@ export default {
 
 <style scoped>
 .sound-map {
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 1rem;
+}
+
+.upload-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
   text-align: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.upload-section h2 {
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+.upload-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.file-input {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem;
+  background: #f5f5f5;
+  border-radius: 5px;
+}
+
+.file-input label {
+  font-weight: bold;
+  margin-right: 1rem;
+}
+
+.file-input input {
+  flex: 1;
+}
+
+.load-btn {
+  padding: 12px 30px;
+  background: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.load-btn:hover {
+  background: #357abd;
+}
+
+.map-section {
+  background: white;
+  padding: 1rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.session-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #eee;
+}
+
+.session-info h2 {
+  margin: 0;
+  color: #333;
+}
+
+.reset-btn {
+  padding: 8px 16px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.reset-btn:hover {
+  background: #c0392b;
 }
 
 .map-container {
   border: 3px solid #4a90e2;
-  border-radius: 15px;
+  border-radius: 10px;
   overflow: hidden;
   margin-bottom: 1rem;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.legend-marker {
+  font-size: 18px;
+  margin-right: 5px;
 }
 </style>
